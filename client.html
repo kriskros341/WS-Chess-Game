@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css.css"/>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+    <title></title>
+  </head>
+  <body>
+    <div class="container fx-r">
+      <div id="leftPanel">
+        <button id="createGameBtn">create game</button>
+        <div>
+          <button id="showJoinFormBtn">Join game</button>
+          <div class="invisible" id="gameIdInput">
+            <input value="insert game id" id="joinGameInpt" name="gameId"></input>
+            <button id="joinGameBtn">Join</button>
+          </div>
+        </div>
+      </div>
+      <div id="rightPanel">
+        <div id="notificationBox" class="notification">
+           <p></p>
+        </div>
+        <div class="game" id="gamePanel">
+
+        </div>
+      </div>
+    </div>
+
+
+
+
+    <script type="text/javascript">
+    let operating_piece = null
+    let myGame = null
+    let moveData = {"piece":null, "to":null}
+    const ServerIp = 'kriskros.ddns.net'
+    const CreateGameBtn = document.getElementById('createGameBtn')
+    const JoinGameBtn = document.getElementById('joinGameBtn')
+    const ShowJoinGameBtn = document.getElementById('showJoinFormBtn')
+    const JoinGameInpt = document.getElementById('joinGameInpt')
+    const NotificationBox = document.getElementById('notificationBox')
+    const RightPanel = document.getElementById('rightPanel')
+    const GamePanel = document.getElementById('gamePanel')
+
+    class Pawn{
+
+    }
+
+
+    class Game{
+      constructor(id){
+        console.log('myGame set as', this)
+        this.id = id
+        this.tiles = []
+      }
+
+      create_board(id){
+        let table = document.createElement('TABLE')
+        for(let step = 0;step<8;step++){
+          let tr = document.createElement('TR')
+          for(let step2 = 0;step2<8;step2++){
+            let td = document.createElement('TD')
+            td.setAttribute('id',`${step+1}${step2+1}`)
+            tr.appendChild(td)
+            td.addEventListener('click', moveThisPawn.bind(event))
+          }
+          table.appendChild(tr)
+        }
+        GamePanel.appendChild(table)
+      }
+
+      render(){
+        let t = document.querySelectorAll('td')
+        for(let x = 0;x<t.length;x++){
+          if(!(this.tiles[x]['piece'] == "None")){
+            t[x].innerText = this.tiles[x]['piece']
+          }
+          else {
+            console.log(t[x].innerText)
+            t[x].innerText = null
+          }
+        }
+      }
+    }
+
+
+  const createGameBtnHandler = () => {
+      $.get(`http://${ServerIp}:3333/create_game`, (data, status) => {
+        createSocketConnection(data)
+      }).fail(notification('brak połączenia z serwerem'))}
+
+
+  function createSocketConnection(data){
+    ws = new WebSocket(`ws://${ServerIp}:3333/game`)
+    ws.onerror = () => {
+      console.log('jd')
+      notification(`brak połączenia z serwerem`)
+    }
+    ws.onmessage = (message) => {
+      data = JSON.parse(message['data'])
+      switch(data['state']){
+        case 'ready':
+          if(!(operating_piece == null)){
+            operating_piece.classList.toggle('selected')
+            operating_piece = null
+          }
+          notification(`id gry to ${data['id']}`)
+          break;
+        case 'denied':
+          notification(`lobby ${data['id']} jest pełne!`)
+          break;
+        case 'refr':
+          console.log('refresh')
+          game_data = []
+          for(let x of data['game_state']){
+            console.log(x['piece'] == null)
+            game_data.push(JSON.parse(x))
+          }
+          updateGame_state(game_data, data['gameId'])
+          break;
+        case 'invalid_move':
+          game_data = []
+          for(let x of data['game_state']){
+            game_data.push(JSON.parse(x))
+          }
+          updateGame_state(game_data, data['gameId'])
+          break;
+    }}
+    ws.onopen = () => {
+      ws.send(JSON.stringify({'option':'join', 'gameId':data}))
+      startGame(data)
+    }
+
+  }
+
+  /* IMPORTANT PART */
+  const updateGame_state = (game_state, id) => {
+    console.log(id)
+    if(myGame == null){
+      myGame = new Game(id)
+      myGame.create_board()
+    }
+    myGame.tiles = game_state
+    myGame.render()
+    }
+
+
+  const startGame = (data) => {
+    ws.send(JSON.stringify({'option':'refr','gameId':data}))
+
+  }
+  const showJoinGameBtnHanlder = () => {
+    toggleJoinForm()
+  }
+  const toggleJoinForm = () => {
+    ShowJoinGameBtn.nextElementSibling.classList.toggle('invisible')
+  }
+  const joinGameBtnHandler = () => {
+    let data = JoinGameInpt.value
+    createSocketConnection(data)
+  }
+  const notification = (msg) => {
+    NotificationBox.firstElementChild.innerText = msg
+  }
+
+/* Pionki mogą nachodzić! */
+  const moveThisPawn= (event) => {
+    if(operating_piece == null){
+      operating_piece = event.target
+      console.log(operating_piece)
+      moveData['piece'] = operating_piece.id
+      event.target.classList.toggle('selected')
+    } else {
+      moveData['to'] = event.target.id
+      operating_piece.classList.toggle('selected')
+      operating_piece = null
+    }
+    if((moveData['piece'] != null) && (moveData['to'] != null)){
+      console.log('gameId',myGame.id)
+      ws.send(JSON.stringify({'option':'move', 'gameId':myGame.id, 'move_data':moveData}))
+      moveData = {"piece":null, "to":null}
+    }
+
+  }
+/*
+  Objekty pionków
+    (x,y)
+    rodzaj = ''
+    img = 'url'
+
+  Walidację
+  Grafikę pionków
+  ładniejszy panel boczny
+  Sprawdzanie czy gra dobiegła końca
+  Przycisk 'Poddaj się'
+
+  Konta użytkowników?
+
+
+*/
+
+    CreateGameBtn.addEventListener('click', createGameBtnHandler)
+    ShowJoinGameBtn.addEventListener('click', showJoinGameBtnHanlder)
+    JoinGameBtn.addEventListener('click', joinGameBtnHandler)
+
+    </script>
+
+
+
+
+  </body>
+</html>
